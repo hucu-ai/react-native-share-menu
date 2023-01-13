@@ -112,6 +112,11 @@ class ShareMenu: RCTEventEmitter {
         sharedData = []
     }
     
+    @objc
+    func clearSharedText() {
+        sharedData = nil
+    }
+
     func dispatchEvent(with data: [[String:String]], and extraData: [String:Any]?) {
         guard hasListeners else { return }
 

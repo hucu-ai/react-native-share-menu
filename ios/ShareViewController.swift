@@ -86,6 +86,8 @@ class ShareViewController: SLComposeServiceViewController {
             self.storeText(withProvider: provider, semaphore)
           } else if provider.isURL {
             self.storeUrl(withProvider: provider, semaphore)
+          } else if provider.isImage {
+            self.storeImage(withProvider: provider, semaphore)
           } else {
             self.storeFile(withProvider: provider, semaphore)
           }
@@ -160,6 +162,91 @@ class ShareViewController: SLComposeServiceViewController {
     }
   }
   
+   /**
+  * Images can be provided in two types: URL or UIImage.
+  * We check here the type and call storeFile for url and storeImageRawData for uiimage
+  */
+  func storeImage(withProvider provider: NSItemProvider, _ semaphore: DispatchSemaphore) {
+    provider.loadItem(forTypeIdentifier: kUTTypeData as String, options: nil) { (data, error) in
+      guard (error == nil) else {
+        self.exit(withError: error.debugDescription)
+        return
+      }
+
+      if data as? URL != nil {
+        self.storeFile(withProvider: provider, semaphore)
+      }
+      else if data as? UIImage != nil {
+        self.storeImageRawData(withProvider: provider, semaphore)
+      }
+      else {
+        self.exit(withError: "ShareViewController: storeImage  - data type unknown")
+      }
+    }
+  }
+  /**
+  * Takes an UIImage as input, converts it to NSData and saves it to jpeg file
+  */
+  func storeImageRawData(withProvider provider: NSItemProvider, _ semaphore: DispatchSemaphore) {
+    
+    provider.loadItem(forTypeIdentifier: kUTTypeData as String, options: nil) { (data, error) in
+      guard (error == nil) else {
+        
+        self.exit(withError: error.debugDescription)
+        return
+      }
+      guard let uiImage = data as? UIImage else {
+        
+        self.exit(withError: COULD_NOT_FIND_IMG_ERROR)
+        return
+      }
+      guard let hostAppId = self.hostAppId else {
+        
+        self.exit(withError: NO_INFO_PLIST_INDENTIFIER_ERROR)
+        return
+      }
+
+      guard let groupFileManagerContainer = FileManager.default
+              .containerURL(forSecurityApplicationGroupIdentifier: "group.\(hostAppId)")
+      else {
+        
+        self.exit(withError: NO_APP_GROUP_ERROR)
+        return
+      }
+
+      let fileExtension = "jpg"
+      let fileName = UUID().uuidString
+      let filePath = groupFileManagerContainer
+        .appendingPathComponent("\(fileName).\(fileExtension)")
+      
+
+      guard let rawData = uiImage.jpegData(compressionQuality:1.0)
+      else {
+        
+        self.exit(withError: "Error while getting raw data")
+        return
+      }
+
+      guard self.copyRawDataToFile(data:rawData, to: filePath)
+      else {
+        
+        self.exit(withError: "Error while copying raw data")
+        return
+      }
+
+      self.sharedItems.append([DATA_KEY: filePath.absoluteString, MIME_TYPE_KEY: "image/jpeg"])
+      semaphore.signal()
+    }
+  }
+  func copyRawDataToFile(data rawData: Data, to destUrl: URL) -> Bool {
+    guard FileManager.default.createFile(atPath: destUrl.path, contents: rawData)
+    else {
+      self.exit(withError: "Error while createFile")
+      return false
+    }
+    return true
+  }
+
   func storeFile(withProvider provider: NSItemProvider, _ semaphore: DispatchSemaphore) {
     provider.loadItem(forTypeIdentifier: kUTTypeData as String, options: nil) { (data, error) in
       guard (error == nil) else {
